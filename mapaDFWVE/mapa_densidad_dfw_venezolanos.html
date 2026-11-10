@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concentración de Venezolanos en DFW</title>
+    
+    <!-- Tailwind CSS para el diseño del Dashboard -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        /* Ajustes base para asegurar que el mapa y el layout funcionen bien */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+        
+        /* Asegurar que Leaflet se mantenga debajo de los menús superpuestos si los hubiera, 
+           aunque con Flexbox no deberían solaparse */
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+
+        /* Personalización de los popups de Leaflet para que combinen con el diseño moderno */
+        .leaflet-popup-content-wrapper {
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .leaflet-popup-content {
+            margin: 16px;
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden font-sans text-gray-800 relative">
+
+    <!-- Botón flotante para abrir menú en móviles -->
+    <button id="mobile-menu-btn" class="md:hidden absolute bottom-6 right-6 z-[999] bg-blue-700 hover:bg-blue-800 text-white p-4 rounded-full shadow-2xl flex items-center justify-center transition-transform transform hover:scale-105">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+    </button>
+
+    <!-- Overlay oscuro cuando el menú está abierto en móvil -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-[990] hidden md:hidden transition-opacity"></div>
+
+    <!-- Left side: The Leaflet Map -->
+    <div id="map" class="w-full h-full flex-1 z-10 relative"></div>
+
+    <!-- Right side: A sidebar -->
+    <aside id="sidebar" class="fixed inset-y-0 right-0 transform translate-x-full md:translate-x-0 md:relative md:inset-auto transition-transform duration-300 ease-in-out w-[85%] max-w-sm md:w-96 md:max-w-none h-full bg-gray-50 shadow-2xl md:shadow-lg flex flex-col z-[1000] md:z-20 border-l border-gray-200">
+        
+        <!-- Header -->
+        <header class="bg-blue-800 text-white p-5 shadow-md flex-shrink-0 flex justify-between items-center">
+            <h1 class="text-xl font-bold tracking-tight">Concentración Venezolana en DFW</h1>
+            <button id="close-sidebar-btn" class="md:hidden text-white hover:text-gray-200 p-1">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </header>
+
+        <!-- Stats section -->
+        <div class="p-5 border-b border-gray-200 bg-white flex-shrink-0 overflow-y-auto">
+            <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Desglose Poblacional (Est.)</h2>
+            <ul class="space-y-2 text-sm">
+                <li class="flex justify-between items-center">
+                    <span class="text-gray-700">Collin County</span>
+                    <span class="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">8,500</span>
+                </li>
+                <li class="flex justify-between items-center">
+                    <span class="text-gray-700">Dallas County</span>
+                    <span class="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">8,300</span>
+                </li>
+                <li class="flex justify-between items-center">
+                    <span class="text-gray-700">Denton County</span>
+                    <span class="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">6,100</span>
+                </li>
+                <li class="flex flex-col border-l-2 border-orange-400 pl-2 ml-1 mt-1 mb-1">
+                    <div class="flex justify-between items-center w-full">
+                        <span class="text-gray-700">Tarrant County (Total)</span>
+                        <span class="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">7,646</span>
+                    </div>
+                    <div class="flex justify-between items-center w-full text-xs text-gray-500 mt-1">
+                        <span>↪ Mayoría en Arlington / Haltom</span>
+                    </div>
+                </li>
+                <li class="flex justify-between items-center pt-2 mt-2 border-t border-gray-100">
+                    <span class="font-bold text-gray-900">Total</span>
+                    <span class="bg-blue-600 text-white font-bold px-2 py-0.5 rounded">30,546</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Interactive List -->
+        <div class="p-5 flex-1 bg-gray-50 overflow-y-auto">
+            <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Puntos Gastronómicos y Demográficos</h2>
+            <div id="sidebar-list" class="space-y-3">
+                <!-- Items dynamically injected here -->
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="p-4 text-xs text-gray-500 text-center border-t border-gray-200 bg-white flex-shrink-0">
+            <strong>Fuentes:</strong> U.S. Census Bureau (ACS 2024), Pew Research Center. Estimaciones consolidadas.
+            <button onclick="document.getElementById('metodologia-modal').classList.remove('hidden')" class="text-blue-600 font-semibold hover:underline flex items-center justify-center w-full mt-2 cursor-pointer transition-colors">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                Ver Metodología Detallada
+            </button>
+        </footer>
+    </aside>
+
+    <!-- Modal de Metodología -->
+    <div id="metodologia-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-[9999] flex justify-center items-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">
+                <h2 class="text-lg font-bold text-gray-800 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Fuentes y Metodología de Datos
+                </h2>
+                <button onclick="document.getElementById('metodologia-modal').classList.add('hidden')" class="text-gray-500 hover:text-red-600 text-3xl leading-none">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto text-sm text-gray-700 space-y-5">
+                <div>
+                    <h3 class="font-bold text-gray-900 text-base mb-2 border-l-4 border-blue-600 pl-2">1. Totales del Área Metropolitana (DFW)</h3>
+                    <p class="mb-2">La cifra base de aproximadamente <strong>30,546 residentes</strong> en el Metroplex es un punto medio consolidado proveniente de las siguientes fuentes macro:</p>
+                    <ul class="list-disc pl-5 space-y-1 text-gray-600 marker:text-blue-500">
+                        <li><strong>Pew Research Center (2024-2026):</strong> Análisis sobre la población hispana de origen venezolano en áreas metropolitanas de EE. UU.</li>
+                        <li><strong>Migration Policy Institute (MPI):</strong> Análisis de los microdatos de la American Community Survey (ACS) del Censo.</li>
+                        <li><strong>Neilsberg Research:</strong> Agregación de datos censales para crear perfiles demográficos locales.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-bold text-gray-900 text-base mb-2 border-l-4 border-orange-400 pl-2">2. Metodología por Condado</h3>
+                    <p class="mb-2">La Oficina del Censo de EE. UU. <strong>no publica</strong> tablas anuales con el número exacto de esta demografía específica por condado individual. Los números en el mapa se obtuvieron mediante extrapolación basada en:</p>
+                    <ul class="list-disc pl-5 space-y-1 text-gray-600 marker:text-orange-400">
+                        <li>Datos base del U.S. Census Bureau (ACS) sobre "Población Nacida en el Extranjero (América del Sur)".</li>
+                        <li><strong>Distribución Ponderada:</strong> El volumen total estimado (30,546) se distribuyó utilizando tendencias de asentamiento. Ejemplo: El Censo confirma que el Condado de Collin y ciertas zonas de Tarrant tienen las tasas de crecimiento de inmigración hispana más altas del norte de Texas.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-bold text-gray-900 text-base mb-2 border-l-4 border-green-500 pl-2">3. Geolocalización Gastronómica</h3>
+                    <p class="text-gray-600">Las ubicaciones de los restaurantes representados en la lista fueron verificadas utilizando bases de datos públicas de mapas geocodificados (Google Maps / OpenStreetMap) para garantizar que los pines caigan en sus coordenadas (Lat/Lon) exactas en el mapa.</p>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-end rounded-b-lg">
+                <button onclick="document.getElementById('metodologia-modal').classList.add('hidden')" class="bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 px-6 rounded transition-colors shadow-sm">Entendido</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    
+    <script>
+        // Inicializar el mapa centrado en el Metroplex DFW (Ajustado para abarcar bien Denton)
+        const map = L.map('map').setView([32.95, -97.00], 9);
+
+        // Capa de mapa base (OpenStreetMap estándar)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Generar puntos de calor alrededor de los centros poblacionales exactos
+        const heatData = [];
+        const populationCenters = [
+            { name: "Condado de Dallas (Norte/Centro)", lat: 32.950, lon: -96.830, count: 200, pop: "8,300" },
+            { name: "Condado de Denton (Lewisville/Denton)", lat: 33.100, lon: -97.050, count: 150, pop: "6,100" },
+            { name: "Condado de Collin (Plano/Frisco)", lat: 33.150, lon: -96.800, count: 210, pop: "8,500" },
+            { name: "Tarrant - Zona Arlington", lat: 32.735, lon: -97.108, count: 120, pop: "~4,500" },
+            { name: "Tarrant - Haltom / Fort Worth", lat: 32.810, lon: -97.280, count: 60, pop: "~3,146" }
+        ];
+
+        populationCenters.forEach(center => {
+            for (let i = 0; i < center.count; i++) {
+                // Dispersión (scatter) para hacer el mapa de calor realista
+                const latOffset = (Math.random() - 0.5) * 0.15;
+                const lonOffset = (Math.random() - 0.5) * 0.15;
+                heatData.push([center.lat + latOffset, center.lon + lonOffset, Math.random()]);
+            }
+            
+            // TRUCO PARA EL HOVER: Crear un círculo invisible interactivo sobre el mapa de calor
+            L.circle([center.lat, center.lon], {
+                radius: 12000, // 12km de radio cubriendo la zona de calor
+                color: 'transparent',
+                fillColor: 'transparent',
+                fillOpacity: 0,
+                interactive: true
+            }).addTo(map).bindTooltip(
+                `<div class="text-sm font-sans">
+                    <strong class="text-gray-800">${center.name}</strong><br>
+                    Población estimada: <span class="text-blue-600 font-bold">${center.pop}</span> residentes
+                </div>`, 
+                { sticky: true, className: 'bg-white border-0 shadow-lg rounded p-2' }
+            );
+        });
+
+        // Fix: Añadir capa de Heatmap con un ligero retraso
+        setTimeout(() => {
+            map.invalidateSize();
+            L.heatLayer(heatData, {
+                radius: 25,
+                blur: 20,
+                maxZoom: 12,
+                gradient: {0.2: 'blue', 0.4: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red'}
+            }).addTo(map);
+        }, 100);
+
+        // Datos Exactos de los Restaurantes (Coordenadas geocodificadas reales)
+        const restaurants = [
+            { nombre: "Pastelitos Hugo", direccion: "18900 Dallas Pkwy suite 104, Dallas, TX 75287", condado: "Dallas", lat: 33.0031, lon: -96.8274 },
+            { nombre: "Tu Pastelito.com", direccion: "18110 Midway Rd Suite 104, Dallas, TX 75287", condado: "Dallas", lat: 32.9926, lon: -96.8406 },
+            { nombre: "Sabor Llanero", direccion: "4021 Belt Line Rd Suit 109, Addison, TX 75001", condado: "Dallas", lat: 32.9535, lon: -96.8402 },
+            { nombre: "Alma Llanera Gastronomy", direccion: "1628 W Hebron Pkwy, Carrollton, TX 75010", condado: "Denton", lat: 33.0136, lon: -96.9056 },
+            { nombre: "Cachapas y Mas", direccion: "8500 Ohio Dr, Plano, TX 75024", condado: "Collin", lat: 33.0916, lon: -96.7981 },
+            { nombre: "Budaretx Venezuelan Food", direccion: "2430 N Davis Dr St 100, Arlington, TX 76012", condado: "Tarrant (Arlington)", lat: 32.7599, lon: -97.1354 },
+            { nombre: "Mi Vaquita Restaurant", direccion: "514 W Park Row Dr, Arlington, TX 76010", condado: "Tarrant (Arlington)", lat: 32.7214, lon: -97.1128 },
+            { nombre: "Mango's Grill", direccion: "5912 Denton Hwy, Haltom City, TX 76148", condado: "Tarrant (Haltom)", lat: 32.8465, lon: -97.2625 }
+        ];
+
+        const listContainer = document.getElementById('sidebar-list');
+        const markers = [];
+
+        // Iterar sobre los datos para pintar marcadores exactos y crear lista
+        restaurants.forEach((item, index) => {
+            // Crear marcador exacto
+            const marker = L.marker([item.lat, item.lon]).addTo(map);
+
+            // Contenido del Popup
+            const popupContent = `
+                <div class="min-w-[200px]">
+                    <h3 class="font-bold text-lg text-orange-600 border-b pb-1 mb-2">${item.nombre}</h3>
+                    <div class="text-sm text-gray-700 space-y-1">
+                        <p><span class="font-semibold">📍 Dirección:</span> ${item.direccion}</p>
+                        <p><span class="font-semibold">🏢 Condado:</span> ${item.condado}</p>
+                    </div>
+                </div>
+            `;
+            marker.bindPopup(popupContent);
+            markers.push(marker);
+
+            // Crear elemento en la lista interactiva
+            const listItem = document.createElement('div');
+            listItem.className = "p-3 bg-white border border-gray-200 rounded shadow-sm cursor-pointer hover:border-orange-400 hover:shadow-md transition-all duration-200";
+            listItem.innerHTML = `
+                <h4 class="font-bold text-gray-800">${item.nombre}</h4>
+                <p class="text-xs text-gray-500 mt-1">${item.condado}</p>
+            `;
+            
+            // Evento click: Volar (flyTo) a la locación y abrir el popup
+            listItem.addEventListener('click', () => {
+                // Cerrar el menú en dispositivos móviles para poder ver la animación en el mapa
+                if (window.innerWidth < 768) {
+                    document.getElementById('sidebar').classList.add('translate-x-full');
+                    document.getElementById('sidebar-overlay').classList.add('hidden');
+                }
+
+                map.flyTo([item.lat, item.lon], 15, {
+                    animate: true,
+                    duration: 1.2
+                });
+                
+                // Abrir el popup después de iniciar la animación
+                setTimeout(() => {
+                    marker.openPopup();
+                }, 400);
+            });
+
+            listContainer.appendChild(listItem);
+        });
+
+        // Lógica del menú deslizable en móvil
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        const openBtn = document.getElementById('mobile-menu-btn');
+        const closeBtn = document.getElementById('close-sidebar-btn');
+
+        function openSidebar() {
+            sidebar.classList.remove('translate-x-full');
+            overlay.classList.remove('hidden');
+        }
+
+        function closeSidebar() {
+            sidebar.classList.add('translate-x-full');
+            overlay.classList.add('hidden');
+        }
+
+        openBtn.addEventListener('click', openSidebar);
+        closeBtn.addEventListener('click', closeSidebar);
+        overlay.addEventListener('click', closeSidebar);
+
+    </script>
+</body>
+</html>
